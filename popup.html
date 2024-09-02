@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+    <meta charset="UTF-8">
+    <title>Tweet to PF Token</title>
+    <script type="text/javascript" src="lib/html2canvas.min.js"></script>
+    <script type="text/javascript" src="https://code.jquery.com/jquery-1.11.0.min.js"></script>
+    <style type="text/css">
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 10px;
+            width: 300px;
+        }
+        h1 {
+            font-size: 16px;
+        }
+        input[type="text"] {
+            width: 100%;
+            padding: 8px;
+            margin-bottom: 10px;
+            box-sizing: border-box;
+        }
+        button {
+            padding: 10px;
+            background-color: #1DA1F2;
+            color: white;
+            border: none;
+            cursor: pointer;
+            width: 100%;
+        }
+        button:hover {
+            background-color: #0d8ddc;
+        }
+        img {
+            margin-top: 10px;
+            max-width: 100%;
+        }
+    </style>
+    <script type="text/javascript">
+    function save(canvas) {
+        window.open(canvas.toDataURL());
+    }
+
+    $(document).ready(function(){
+        $('#tweetButton').click(function () {
+            chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+                if (tabs[0]) {
+                    const tweetLink = $('#tweetLink').val();
+                    const tokenName = $('#tokenName').val();
+                    const ticker = $('#ticker').val();
+                    const devBuyNumber = $('#devBuyNumber').val();
+                    const devBuyPrompt = `Dev Buy: ${devBuyNumber}`;
+
+                    chrome.tabs.sendMessage(tabs[0].id, { 
+                        action: 'captureTweet',
+                        tweetLink: tweetLink,
+                        tokenName: tokenName,
+                        ticker: ticker,
+                        devBuyPrompt: devBuyPrompt
+                    }, (response) => {
+                        if (chrome.runtime.lastError) {
+                            console.error('chrome.runtime.lastError', chrome.runtime.lastError);
+                            alert('There was an error: ' + chrome.runtime.lastError.message);
+                            return;
+                        }
+                        if (response && response.success) {
+                            const tweetImageData = response.image;
+                            const tweetImage = document.getElementById('tweetImage');
+                            tweetImage.src = tweetImageData;
+
+                            // Log the image data
+                            console.log('Captured Image Data:', tweetImageData);
+
+                            // Remove the data URL scheme part
+                            const base64ImageData = tweetImageData.replace(/^data:image\/png;base64,/, '');
+
+                            // Download the captured image
+                            const downloadLink = document.createElement('a');
+                            downloadLink.href = tweetImageData;
+                            downloadLink.download = 'tweet.png';
+                            downloadLink.textContent = 'Download Captured Image';
+                            document.body.appendChild(downloadLink);
+
+                            // Send image data to backend
+                            fetch('http://localhost:3000/create-coin', {
+                                method: 'POST',
+                                headers: {
+                                    'Content-Type': 'application/json',
+                                },
+                                body: JSON.stringify({
+                                    tweetImageData: base64ImageData,
+                                    ticker: ticker,
+                                    name: tokenName,
+                                    description: 'Your description here',
+                                    devBuyPrompt: devBuyPrompt
+                                }),
+                            })
+                            .then(response => response.json())
+                            .then(data => {
+                                console.log('Backend response:', data);
+                                if (data.message === 'Coin created successfully!') {
+                                    alert('Coin created successfully!');
+                                } else {
+                                    alert('Error: ' + data.message);
+                                }
+                            })
+                            .catch((error) => {
+                                console.error('Error:', error);
+                                alert('There was an error creating the coin.');
+                            });
+                        } else {
+                            alert(response.message || 'There was an error capturing the tweet.');
+                        }
+                    });
+                } else {
+                    alert('No active tab found.');
+                }
+            });
+        });
+    });
+    </script>
+</head>
+<body>
+    <h1>Tweet to PF Token</h1>
+    <input type="text" id="tweetLink" placeholder="Enter tweet here" />
+    <input type="text" id="tokenName" placeholder="Enter token name" />
+    <input type="text" id="ticker" placeholder="Enter ticker" />
+    <input type="text" id="devBuyNumber" placeholder="Enter number for Dev Buy" />
+    <button id="tweetButton">Launch</button>
+    <img id="tweetImage" src="" alt="Captured Tweet Image" />
+    <script src="popup.js"></script>
+</body>
+</html>
